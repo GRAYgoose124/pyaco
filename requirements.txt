@@ -1,0 +1,5 @@
+arcade==2.6.17
+fairscale==0.4.13
+gym==0.26.2
+numba==0.58.1
+numpy==1.26.0
