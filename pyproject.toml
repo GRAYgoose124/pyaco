@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "pyaco"
+version = "0.1.0"
+description = ""
+authors = ["Grayson Miller <grayson.miller124@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+numba = "^0.58.1"
+gym = "^0.26.2"
+matplotlib = "^3.8.2"
+arcade = "^2.6.17"
+numpy = "^1.26.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+pyaco = "pyaco.__main__:main"

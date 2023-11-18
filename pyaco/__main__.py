@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import arcade
 import numba
 from numba import int32, int64, float64, boolean
+from numba.typed import List
+
+from .ant import Ant
 
 
 def random_color():
@@ -14,59 +17,6 @@ def random_color():
         np.random.randint(64, 255),
         np.random.randint(0, 255),
     )
-
-
-ant_spec = [
-    ("x", int64),
-    ("y", int64),
-    ("last_x", int64),
-    ("last_y", int64),
-    ("second_last_x", int64),
-    ("second_last_y", int64),
-    ("color", int32[:]),
-    ("pheromone_amount", float64),
-]
-
-
-@numba.experimental.jitclass(ant_spec)
-class Ant:
-    def __init__(self, x, y, color=(255, 0, 0)):
-        self.color = np.array(color, dtype=np.int32)
-
-        self.x = x
-        self.y = y
-        self.last_x = -1  # Use -1 to indicate no previous position
-        self.last_y = -1
-        self.second_last_x = -1
-        self.second_last_y = -1
-
-        self.pheromone_amount = 0.05
-
-    def move(self, action):
-        if action == 0:  # Move up
-            self.y += 1
-        elif action == 1:  # Move right
-            self.x += 1
-        elif action == 2:  # Move down
-            self.y -= 1
-        elif action == 3:  # Move left
-            self.x -= 1
-        elif action == 4:  # Move up-right
-            self.y += 1
-            self.x += 1
-        elif action == 5:  # Move down-right
-            self.y -= 1
-            self.x += 1
-        elif action == 6:  # Move down-left
-            self.y -= 1
-            self.x -= 1
-        elif action == 7:  # Move up-left
-            self.y += 1
-            self.x -= 1
-
-    def choose_action(self):
-        # For now, just return a random action
-        return np.random.randint(0, 8)
 
 
 @numba.jit(nopython=True)
@@ -120,22 +70,62 @@ def observe(ant, local_grid: np.ndarray, occupied_squares: np.ndarray):
     return action
 
 
+@numba.jit(nopython=True)
+def _step(
+    grid, grid_size, ants, pheromone_decay_rate, food_x, food_y
+) -> (np.ndarray, float, bool, dict):
+    reward = 0
+    occupied_squares = np.zeros(grid.shape, dtype=np.bool_)
+    for ant in ants:
+        occupied_squares[ant.y, ant.x] = True
+
+    for ant in ants:
+        # Get the local grid around the ant
+        local_grid = grid[max(0, ant.y - 1) : ant.y + 2, max(0, ant.x - 1) : ant.x + 2]
+        action = observe(ant, local_grid, occupied_squares)
+        ant.move(action)
+        # Wrap around the grid
+        ant.x = ant.x % grid_size
+        ant.y = ant.y % grid_size
+        # Store the last position
+        ant.last_x, ant.last_y = ant.x, ant.y
+        ant.second_last_x, ant.second_last_y = ant.last_x, ant.last_y
+        # Deposit pheromone
+        grid[ant.last_y, ant.last_x] += ant.pheromone_amount
+        if ant.x == food_x and ant.y == food_y:
+            reward += 1
+            ant.x = np.random.randint(0, grid_size)
+            ant.y = np.random.randint(0, grid_size)
+            ant.last_x, ant.last_y = -1, -1
+            ant.second_last_x, ant.second_last_y = -1, -1
+
+    # Pheromone evaporation
+    grid *= pheromone_decay_rate
+
+    done = False
+
+    result = grid, reward, done
+    return result
+
+
 class AntColonyEnv(gym.Env):
     def __init__(self, grid_size, num_ants):
         super(AntColonyEnv, self).__init__()
 
-        self.ants = [
-            Ant(
-                np.random.randint(0, grid_size),
-                np.random.randint(0, grid_size),
-                color=random_color(),
+        self.ants = List()
+
+        for _ in range(num_ants):
+            self.ants.append(
+                Ant(
+                    np.random.randint(0, grid_size),
+                    np.random.randint(0, grid_size),
+                    color=random_color(),
+                )
             )
-            for _ in range(num_ants)
-        ]
 
         self.grid_size = grid_size
         self.grid = np.zeros((grid_size, grid_size))
-        self.pheromone_decay_rate = 0.99
+        self.pheromone_decay_rate = 0.998
 
         self.food_x = np.random.randint(0, grid_size)
         self.food_y = np.random.randint(0, grid_size)
@@ -146,40 +136,15 @@ class AntColonyEnv(gym.Env):
             low=0, high=1, shape=(grid_size, grid_size), dtype=np.float32
         )
 
-    @numba.jit(forceobj=True)
     def step(self):
-        reward = 0
-        occupied_squares = np.zeros_like(self.grid, dtype=bool)
-        for ant in self.ants:
-            occupied_squares[ant.y, ant.x] = True
-
-        for ant in self.ants:
-            # Get the local grid around the ant
-            local_grid = self.grid[
-                max(0, ant.y - 1) : ant.y + 2, max(0, ant.x - 1) : ant.x + 2
-            ]
-            action = observe(ant, local_grid, occupied_squares)
-            ant.move(action)
-            # Wrap around the grid
-            ant.x = ant.x % self.grid_size
-            ant.y = ant.y % self.grid_size
-            # Store the last position
-            ant.last_x, ant.last_y = ant.x, ant.y
-            ant.second_last_x, ant.second_last_y = ant.last_x, ant.last_y
-            # Deposit pheromone
-            self.grid[ant.last_y, ant.last_x] += ant.pheromone_amount
-            if ant.x == self.food_x and ant.y == self.food_y:
-                reward += 1
-                ant.x = np.random.randint(0, self.grid_size)
-                ant.y = np.random.randint(0, self.grid_size)
-                ant.last_x, ant.last_y = -1, -1
-                ant.second_last_x, ant.second_last_y = -1, -1
-
-        # Pheromone evaporation
-        self.grid *= self.pheromone_decay_rate
-
-        done = False
-
+        self.grid, reward, done = _step(
+            self.grid,
+            self.grid_size,
+            self.ants,
+            self.pheromone_decay_rate,
+            self.food_x,
+            self.food_y,
+        )
         return self.grid, reward, done, {}
 
     def reset(self):
