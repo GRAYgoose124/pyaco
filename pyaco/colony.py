@@ -88,7 +88,9 @@ def _step(
         ant.last_x, ant.last_y = ant.x, ant.y
         ant.second_last_x, ant.second_last_y = ant.last_x, ant.last_y
         # Deposit pheromone
-        grid[ant.last_y, ant.last_x] += ant.pheromone_amount
+        grid[ant.last_y, ant.last_x] = min(
+            1.0, grid[ant.last_y, ant.last_x] + ant.pheromone_amount
+        )
         if ant.x == food_x and ant.y == food_y:
             reward += 1
             ant.x = np.random.randint(0, grid_size)
@@ -110,7 +112,6 @@ class AntColonyEnv(gym.Env):
         super(AntColonyEnv, self).__init__()
 
         self.ants = List()
-
         for _ in range(num_ants):
             self.ants.append(
                 Ant(
