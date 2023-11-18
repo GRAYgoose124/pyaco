@@ -72,6 +72,7 @@ def _step(
     grid, grid_size, ants, pheromone_decay_rate, food_x, food_y
 ) -> (np.ndarray, float, bool, dict):
     reward = 0
+    new_food = False
     occupied_squares = np.zeros(grid.shape, dtype=np.bool_)
     for ant in ants:
         occupied_squares[ant.y, ant.x] = True
@@ -82,8 +83,8 @@ def _step(
         action = observe(ant, local_grid, occupied_squares)
         ant.move(action)
         # Wrap around the grid
-        ant.x = ant.x % grid_size
-        ant.y = ant.y % grid_size
+        ant.x = ant.x % grid_size[0]
+        ant.y = ant.y % grid_size[1]
         # Store the last position
         ant.last_x, ant.last_y = ant.x, ant.y
         ant.second_last_x, ant.second_last_y = ant.last_x, ant.last_y
@@ -93,17 +94,18 @@ def _step(
         )
         if ant.x == food_x and ant.y == food_y:
             reward += 1
-            ant.x = np.random.randint(0, grid_size)
-            ant.y = np.random.randint(0, grid_size)
+            ant.x = np.random.randint(0, grid_size[0])
+            ant.y = np.random.randint(0, grid_size[1])
             ant.last_x, ant.last_y = -1, -1
             ant.second_last_x, ant.second_last_y = -1, -1
+            new_food = True
 
     # Pheromone evaporation
     grid *= pheromone_decay_rate
 
     done = False
 
-    result = grid, reward, done
+    result = grid, reward, done, new_food
     return result
 
 
@@ -115,27 +117,27 @@ class AntColonyEnv(gym.Env):
         for _ in range(num_ants):
             self.ants.append(
                 Ant(
-                    np.random.randint(0, grid_size),
-                    np.random.randint(0, grid_size),
+                    np.random.randint(0, grid_size[0]),
+                    np.random.randint(0, grid_size[1]),
                     color=random_color(),
                 )
             )
 
         self.grid_size = grid_size
-        self.grid = np.zeros((grid_size, grid_size))
+        self.grid = np.zeros(grid_size)
         self.pheromone_decay_rate = 0.998
 
-        self.food_x = np.random.randint(0, grid_size)
-        self.food_y = np.random.randint(0, grid_size)
+        self.food_x = np.random.randint(0, grid_size[0])
+        self.food_y = np.random.randint(0, grid_size[1])
 
         # Define action and observation spaces
         self.action_space = spaces.Discrete(8)  # 0: Up, 1: Right, 2: Down, 3: Left
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(grid_size, grid_size), dtype=np.float32
+            low=0, high=1, shape=grid_size, dtype=np.float32
         )
 
     def step(self):
-        self.grid, reward, done = _step(
+        self.grid, reward, done, new_food = _step(
             self.grid,
             self.grid_size,
             self.ants,
@@ -143,11 +145,16 @@ class AntColonyEnv(gym.Env):
             self.food_x,
             self.food_y,
         )
+
+        if new_food:
+            self.food_x = np.random.randint(0, self.grid_size[0])
+            self.food_y = np.random.randint(0, self.grid_size[1])
+
         return self.grid, reward, done, {}
 
     def reset(self):
         # Reset the environment to its initial state
-        self.grid = np.zeros((self.grid_size, self.grid_size))
+        self.grid = np.zeros(self.grid_size)
         return self.grid
 
     def close(self):
