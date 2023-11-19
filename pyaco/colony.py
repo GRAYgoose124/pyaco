@@ -28,42 +28,34 @@ def weighted_random_choice(choices, probabilities):
 
 @numba.jit(nopython=True)
 def observe(ant, local_grid: np.ndarray, occupied_squares: np.ndarray):
-    # Define possible moves: (dy, dx)
     moves = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
-    pheromone_values = np.empty(0, dtype=np.float64)
+    pheromone_values = np.empty(len(moves), dtype=np.float64)
+
+    center_y, center_x = 1, 1  # Center of the 3x3 grid
+
+    # Calculate the previous move direction
+    prev_dy, prev_dx = 0, 0
+    if ant.last_x != -1 and ant.last_y != -1:
+        prev_dy = ant.y - ant.last_y
+        prev_dx = ant.x - ant.last_x
 
     for idx, (dy, dx) in enumerate(moves):
-        # Check if the move is within the local grid boundaries
-        if (
-            0 <= ant.y + dy < local_grid.shape[0]
-            and 0 <= ant.x + dx < local_grid.shape[1]
-            and not occupied_squares[ant.y + dy, ant.x + dx]
-            and (ant.last_y == -1 or ant.y + dy != ant.last_y)
-            and (ant.last_x == -1 or ant.x + dx != ant.last_x)
-            and (
-                ant.last_y == -1
-                or ant.y + dy != ant.last_y
-                or ant.y + dy != ant.second_last_y
-            )
-            and (
-                ant.last_x == -1
-                or ant.x + dx != ant.last_x
-                or ant.x + dx != ant.second_last_x
-            )
-        ):
-            pheromone_values = np.append(
-                pheromone_values, local_grid[ant.y + dy, ant.x + dx]
-            )
+        grid_y, grid_x = center_y + dy, center_x + dx
+
+        if 0 <= grid_y < 3 and 0 <= grid_x < 3:
+            pheromone_value = local_grid[grid_y, grid_x]
+
+            # Bias towards forward motion
+            if dy == prev_dy and dx == prev_dx:
+                pheromone_value *= 1.5  # Example: Increase pheromone value by 20%
+
+            pheromone_values[idx] = pheromone_value
         else:
-            pheromone_values = np.append(
-                pheromone_values, -1.0
-            )  # Invalid moves get a negative value
+            pheromone_values[idx] = -1.0  # Invalid moves get a negative value
 
-    # Find the indices of the maximum pheromone values
-    max_indices = np.where(pheromone_values == pheromone_values.max())[0]
-
-    # Choose a move based on the maximum pheromone values
-    action = np.random.choice(max_indices)
+    probabilities = np.exp(pheromone_values)
+    probabilities /= np.sum(probabilities)
+    action = weighted_random_choice(np.arange(8), probabilities)
     return action
 
 
@@ -79,7 +71,7 @@ def _step(
 
     for ant in ants:
         # Get the local grid around the ant
-        local_grid = grid[max(0, ant.y - 1) : ant.y + 2, max(0, ant.x - 1) : ant.x + 2]
+        local_grid = grid[max(0, ant.y - 2) : ant.y + 3, max(0, ant.x - 2) : ant.x + 3]
         action = observe(ant, local_grid, occupied_squares)
         ant.move(action)
         # Wrap around the grid
@@ -110,7 +102,9 @@ def _step(
 
 
 class AntColonyEnv(gym.Env):
-    def __init__(self, grid_size, num_ants):
+    def __init__(
+        self, grid_size, num_ants, decay_rate=0.999, ant_pheromone_amount=0.01
+    ):
         super(AntColonyEnv, self).__init__()
 
         self.ants = List()
@@ -120,12 +114,13 @@ class AntColonyEnv(gym.Env):
                     np.random.randint(0, grid_size[0]),
                     np.random.randint(0, grid_size[1]),
                     color=random_color(),
+                    pheromone_amount=ant_pheromone_amount,
                 )
             )
 
         self.grid_size = grid_size
         self.grid = np.zeros(grid_size)
-        self.pheromone_decay_rate = 0.998
+        self.pheromone_decay_rate = decay_rate
 
         self.food_x = np.random.randint(0, grid_size[0])
         self.food_y = np.random.randint(0, grid_size[1])

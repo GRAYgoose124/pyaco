@@ -23,7 +23,14 @@ class AntColonyWindow(arcade.Window):
         )
         self.grid_size = grid_size
         self.ITERATIONS_PER_FRAME = 10
-        self.env = AntColonyEnv(grid_size, ant_count)
+        self.DECAY_RATE = 0.995
+        self.ANT_PHEREMONE_AMOUNT = 0.04
+        self.env = AntColonyEnv(
+            grid_size,
+            ant_count,
+            decay_rate=self.DECAY_RATE,
+            ant_pheromone_amount=self.ANT_PHEREMONE_AMOUNT,
+        )
         self.env.reset()
 
         self.ant_sprites = arcade.SpriteList()

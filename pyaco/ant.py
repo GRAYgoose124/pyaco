@@ -16,7 +16,7 @@ ant_spec = [
 
 @numba.experimental.jitclass(ant_spec)
 class Ant:
-    def __init__(self, x, y, color=(255, 0, 0)):
+    def __init__(self, x, y, color=(255, 0, 0), pheromone_amount=0.01):
         self.color = np.array(color, dtype=np.int32)
 
         self.x = x
@@ -26,7 +26,7 @@ class Ant:
         self.second_last_x = -1
         self.second_last_y = -1
 
-        self.pheromone_amount = 0.01
+        self.pheromone_amount = pheromone_amount
 
     def move(self, action):
         if action == 0:  # Move up
@@ -49,7 +49,3 @@ class Ant:
         elif action == 7:  # Move up-left
             self.y += 1
             self.x -= 1
-
-    def choose_action(self):
-        # For now, just return a random action
-        return np.random.randint(0, 8)
