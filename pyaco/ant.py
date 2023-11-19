@@ -24,34 +24,50 @@ def weighted_random_choice(choices, probabilities):
     return choices[-1]
 
 
+ANT_MOVES = np.array(
+    [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)],
+    dtype=np.int64,
+)
+
+
 @numba.jit(nopython=True)
 def _observe(ant, grid: np.ndarray, occupied_squares: np.ndarray):
-    local_grid = grid[max(0, ant.y - 2) : ant.y + 3, max(0, ant.x - 2) : ant.x + 3]
+    local_grid = grid[max(0, ant.y - 3) : ant.y + 2, max(0, ant.x - 3) : ant.x + 2]
+    local_occupied = occupied_squares[
+        max(0, ant.y - 3) : ant.y + 2, max(0, ant.x - 3) : ant.x + 2
+    ]
 
-    moves = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
-    pheromone_values = np.empty(len(moves), dtype=np.float64)
+    pheromone_values = np.empty(len(ANT_MOVES), dtype=np.float64)
 
     center_y, center_x = 1, 1  # Center of the 3x3 grid
 
-    # Calculate the previous move direction
     prev_dy, prev_dx = 0, 0
     if ant.last_x != -1 and ant.last_y != -1:
         prev_dy = ant.y - ant.last_y
         prev_dx = ant.x - ant.last_x
 
-    for idx, (dy, dx) in enumerate(moves):
+    for idx, (dy, dx) in enumerate(ANT_MOVES):
         grid_y, grid_x = center_y + dy, center_x + dx
 
         if 0 <= grid_y < 3 and 0 <= grid_x < 3:
             pheromone_value = local_grid[grid_y, grid_x]
 
+            # Check if square is occupied
+            if local_occupied[grid_y, grid_x] == 1:  # Ant present
+                pheromone_value = -5.0
+            elif local_occupied[grid_y, grid_x] == 2:  # Food present
+                pheromone_value = 50.0
+
             # Bias towards forward motion
             if dy == prev_dy and dx == prev_dx:
-                pheromone_value *= 10.0
+                pheromone_value *= 1.5
 
             pheromone_values[idx] = pheromone_value
         else:
-            pheromone_values[idx] = -1.0
+            if dy == prev_dy and dx == prev_dx:
+                pheromone_values[idx] = -5.0
+            else:
+                pheromone_values[idx] = -10.0
 
     probabilities = np.exp(pheromone_values)
     probabilities /= np.sum(probabilities)

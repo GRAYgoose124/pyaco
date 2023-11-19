@@ -120,12 +120,13 @@ def main():
 
     app = AntColonyWindow(
         window_size=(800, 800),
-        ant_count=1000,
-        iters=1,
+        ant_count=1500,
+        iters=10,
         decay=0.99,
         pheremone=0.04,
         food_mul=10,
         n_food=10,
+        square_size=5,
     )
     app.run()
 

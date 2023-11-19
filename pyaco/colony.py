@@ -25,9 +25,11 @@ def _step(
 ) -> (np.ndarray, float, bool, dict):
     reward = 0
     ate_food = None
-    occupied_squares = np.zeros(grid.shape, dtype=np.bool_)
+    occupied_squares = np.zeros(grid.shape, dtype=np.int64)
     for ant in ants:
-        occupied_squares[ant.y, ant.x] = True
+        occupied_squares[ant.y, ant.x] = 1
+    for food in foods:
+        occupied_squares[food[1], food[0]] = 2
 
     for ant in ants:
         # Get the local grid around the ant
@@ -47,7 +49,6 @@ def _step(
         for i, food in enumerate(foods):
             food_x, food_y = food
             if ant.x == food_x and ant.y == food_y:
-                reward += 1
                 ant.x = np.random.randint(0, grid_size[0])
                 ant.y = np.random.randint(0, grid_size[1])
                 ant.last_x, ant.last_y = -1, -1
