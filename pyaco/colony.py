@@ -3,9 +3,12 @@ from gym import spaces
 import numpy as np
 import arcade
 import numba
+import logging
 from numba.typed import List
 
 from .ant import Ant
+
+log = logging.getLogger(__name__)
 
 
 def random_color():
@@ -17,62 +20,18 @@ def random_color():
 
 
 @numba.jit(nopython=True)
-def weighted_random_choice(choices, probabilities):
-    cumulative_probabilities = np.cumsum(probabilities)
-    random_choice = np.random.rand()
-    for i, prob in enumerate(cumulative_probabilities):
-        if random_choice < prob:
-            return choices[i]
-    return choices[-1]
-
-
-@numba.jit(nopython=True)
-def observe(ant, local_grid: np.ndarray, occupied_squares: np.ndarray):
-    moves = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
-    pheromone_values = np.empty(len(moves), dtype=np.float64)
-
-    center_y, center_x = 1, 1  # Center of the 3x3 grid
-
-    # Calculate the previous move direction
-    prev_dy, prev_dx = 0, 0
-    if ant.last_x != -1 and ant.last_y != -1:
-        prev_dy = ant.y - ant.last_y
-        prev_dx = ant.x - ant.last_x
-
-    for idx, (dy, dx) in enumerate(moves):
-        grid_y, grid_x = center_y + dy, center_x + dx
-
-        if 0 <= grid_y < 3 and 0 <= grid_x < 3:
-            pheromone_value = local_grid[grid_y, grid_x]
-
-            # Bias towards forward motion
-            if dy == prev_dy and dx == prev_dx:
-                pheromone_value *= 1.5  # Example: Increase pheromone value by 20%
-
-            pheromone_values[idx] = pheromone_value
-        else:
-            pheromone_values[idx] = -1.0  # Invalid moves get a negative value
-
-    probabilities = np.exp(pheromone_values)
-    probabilities /= np.sum(probabilities)
-    action = weighted_random_choice(np.arange(8), probabilities)
-    return action
-
-
-@numba.jit(nopython=True)
 def _step(
-    grid, grid_size, ants, pheromone_decay_rate, food_x, food_y
+    grid, grid_size, ants, pheromone_decay_rate, foods, remains
 ) -> (np.ndarray, float, bool, dict):
     reward = 0
-    new_food = False
+    ate_food = None
     occupied_squares = np.zeros(grid.shape, dtype=np.bool_)
     for ant in ants:
         occupied_squares[ant.y, ant.x] = True
 
     for ant in ants:
         # Get the local grid around the ant
-        local_grid = grid[max(0, ant.y - 2) : ant.y + 3, max(0, ant.x - 2) : ant.x + 3]
-        action = observe(ant, local_grid, occupied_squares)
+        action = ant.observe(grid, occupied_squares)
         ant.move(action)
         # Wrap around the grid
         ant.x = ant.x % grid_size[0]
@@ -84,26 +43,37 @@ def _step(
         grid[ant.last_y, ant.last_x] = min(
             1.0, grid[ant.last_y, ant.last_x] + ant.pheromone_amount
         )
-        if ant.x == food_x and ant.y == food_y:
-            reward += 1
-            ant.x = np.random.randint(0, grid_size[0])
-            ant.y = np.random.randint(0, grid_size[1])
-            ant.last_x, ant.last_y = -1, -1
-            ant.second_last_x, ant.second_last_y = -1, -1
-            new_food = True
+
+        for i, food in enumerate(foods):
+            food_x, food_y = food
+            if ant.x == food_x and ant.y == food_y:
+                reward += 1
+                ant.x = np.random.randint(0, grid_size[0])
+                ant.y = np.random.randint(0, grid_size[1])
+                ant.last_x, ant.last_y = -1, -1
+                ant.second_last_x, ant.second_last_y = -1, -1
+                remains[i] -= 1
+                if remains[i] == 0:
+                    ate_food = food
 
     # Pheromone evaporation
     grid *= pheromone_decay_rate
 
     done = False
 
-    result = grid, reward, done, new_food
+    result = grid, reward, done, ate_food
     return result
 
 
 class AntColonyEnv(gym.Env):
     def __init__(
-        self, grid_size, num_ants, decay_rate=0.999, ant_pheromone_amount=0.01
+        self,
+        grid_size,
+        num_ants,
+        decay_rate=0.999,
+        ant_pheromone_amount=0.01,
+        food_mul=10,
+        n_food=10,
     ):
         super(AntColonyEnv, self).__init__()
 
@@ -117,13 +87,25 @@ class AntColonyEnv(gym.Env):
                     pheromone_amount=ant_pheromone_amount,
                 )
             )
+        self.ant_count = num_ants
 
         self.grid_size = grid_size
         self.grid = np.zeros(grid_size)
         self.pheromone_decay_rate = decay_rate
 
-        self.food_x = np.random.randint(0, grid_size[0])
-        self.food_y = np.random.randint(0, grid_size[1])
+        # dtype needs to be tuple
+        self.foods = List()
+        self.remains = List()
+        for _ in range(int(abs(n_food))):
+            self.foods.append(
+                np.array(
+                    (
+                        np.random.randint(0, grid_size[0]),
+                        np.random.randint(0, grid_size[1]),
+                    ),
+                )
+            )
+            self.remains.append(self.ant_count * food_mul)
 
         # Define action and observation spaces
         self.action_space = spaces.Discrete(8)  # 0: Up, 1: Right, 2: Down, 3: Left
@@ -132,18 +114,35 @@ class AntColonyEnv(gym.Env):
         )
 
     def step(self):
-        self.grid, reward, done, new_food = _step(
+        self.grid, reward, done, ate_food = _step(
             self.grid,
             self.grid_size,
             self.ants,
             self.pheromone_decay_rate,
-            self.food_x,
-            self.food_y,
+            self.foods,
+            self.remains,
         )
 
-        if new_food:
-            self.food_x = np.random.randint(0, self.grid_size[0])
-            self.food_y = np.random.randint(0, self.grid_size[1])
+        if ate_food is not None:
+            # Find the index of the item to remove
+            index_to_remove = None
+            for i, food in enumerate(self.foods):
+                if np.array_equal(food, ate_food):
+                    log.info(f"Found food to remove at {food}")
+                    index_to_remove = i
+                    break
+
+            if index_to_remove is not None:
+                self.foods.pop(index_to_remove)
+                # add new food
+                self.foods.append(
+                    np.array(
+                        (
+                            np.random.randint(0, self.grid_size[0]),
+                            np.random.randint(0, self.grid_size[1]),
+                        ),
+                    )
+                )
 
         return self.grid, reward, done, {}
 

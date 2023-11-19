@@ -14,6 +14,51 @@ ant_spec = [
 ]
 
 
+@numba.jit(nopython=True)
+def weighted_random_choice(choices, probabilities):
+    cumulative_probabilities = np.cumsum(probabilities)
+    random_choice = np.random.rand()
+    for i, prob in enumerate(cumulative_probabilities):
+        if random_choice < prob:
+            return choices[i]
+    return choices[-1]
+
+
+@numba.jit(nopython=True)
+def _observe(ant, grid: np.ndarray, occupied_squares: np.ndarray):
+    local_grid = grid[max(0, ant.y - 2) : ant.y + 3, max(0, ant.x - 2) : ant.x + 3]
+
+    moves = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
+    pheromone_values = np.empty(len(moves), dtype=np.float64)
+
+    center_y, center_x = 1, 1  # Center of the 3x3 grid
+
+    # Calculate the previous move direction
+    prev_dy, prev_dx = 0, 0
+    if ant.last_x != -1 and ant.last_y != -1:
+        prev_dy = ant.y - ant.last_y
+        prev_dx = ant.x - ant.last_x
+
+    for idx, (dy, dx) in enumerate(moves):
+        grid_y, grid_x = center_y + dy, center_x + dx
+
+        if 0 <= grid_y < 3 and 0 <= grid_x < 3:
+            pheromone_value = local_grid[grid_y, grid_x]
+
+            # Bias towards forward motion
+            if dy == prev_dy and dx == prev_dx:
+                pheromone_value *= 10.0
+
+            pheromone_values[idx] = pheromone_value
+        else:
+            pheromone_values[idx] = -1.0
+
+    probabilities = np.exp(pheromone_values)
+    probabilities /= np.sum(probabilities)
+    action = weighted_random_choice(np.arange(8), probabilities)
+    return action
+
+
 @numba.experimental.jitclass(ant_spec)
 class Ant:
     def __init__(self, x, y, color=(255, 0, 0), pheromone_amount=0.01):
@@ -49,3 +94,6 @@ class Ant:
         elif action == 7:  # Move up-left
             self.y += 1
             self.x -= 1
+
+    def observe(self, grid, occupied_squares):
+        return _observe(self, grid, occupied_squares)
