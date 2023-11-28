@@ -68,15 +68,15 @@ def _observe(ant, grid: np.ndarray, occupied_squares: np.ndarray):
 
         # Check if square is occupied
         if local_occupied[grid_y, grid_x] == 1:  # Ant present
-            pheromone_value = -1.0
+            pheromone_value *= 0.9
         elif local_occupied[grid_y, grid_x] == 2:  # Food present
-            pheromone_value = 5.0
+            pheromone_value *= 2.0
 
         # Bias towards forward motion
         norm_current = np.sqrt(dy**2 + dx**2)
         if norm_prev != 0 and norm_current != 0:
             cos_angle = (dy * prev_dy + dx * prev_dx) / (norm_prev * norm_current)
-            bias_factor = 2 * cos_angle  # Adjust bias here; 1 to 5 range
+            bias_factor = (1.0 + cos_angle) * 0.1
             pheromone_value *= bias_factor
 
         pheromone_values[idx] = pheromone_value

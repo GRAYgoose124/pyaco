@@ -11,11 +11,11 @@ class AntColonyWindow(arcade.Window):
         self,
         window_size=(1280, 720),
         square_size=5,
-        ant_count=50,
+        ant_count=500,
         iters=10,
-        decay=0.995,
-        pheremone=0.04,
-        food_mul=10,
+        decay=0.9,
+        pheremone=0.000001,
+        food_mul=0.01,
         n_food=10,
     ):
         self.square_size = square_size
@@ -126,7 +126,7 @@ def main():
         pheremone=0.05,
         food_mul=10,
         n_food=10,
-        square_size=5,
+        square_size=3,
     )
     app.run()
 
