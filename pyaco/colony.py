@@ -38,21 +38,20 @@ def _step(
         # Wrap around the grid
         ant.x = ant.x % grid_size[0]
         ant.y = ant.y % grid_size[1]
-        # Store the last position
-        ant.last_x, ant.last_y = ant.x, ant.y
-        ant.second_last_x, ant.second_last_y = ant.last_x, ant.last_y
+        # Store the last position in the ant.last_xys array, we need to "push"
+        ant.last_xys = np.roll(ant.last_xys, 1)
+        ant.last_xys[0] = (ant.y, ant.x)
+
         # Deposit pheromone
-        grid[ant.last_y, ant.last_x] = min(
-            1.0, grid[ant.last_y, ant.last_x] + ant.pheromone_amount
-        )
+        lx, ly = ant.last_xys[0][0], ant.last_xys[0][1]
+        grid[lx, ly] = min(1.0, grid[lx, ly] + ant.pheromone_amount)
 
         for i, food in enumerate(foods):
             food_x, food_y = food
             if ant.x == food_x and ant.y == food_y:
                 ant.x = np.random.randint(0, grid_size[0])
                 ant.y = np.random.randint(0, grid_size[1])
-                ant.last_x, ant.last_y = -1, -1
-                ant.second_last_x, ant.second_last_y = -1, -1
+                ant.clear_last()
                 remains[i] -= 1
                 if remains[i] == 0:
                     ate_food = food

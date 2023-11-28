@@ -5,10 +5,7 @@ from numba import int32, int64, float64, boolean
 ant_spec = [
     ("x", int64),
     ("y", int64),
-    ("last_x", int64),
-    ("last_y", int64),
-    ("second_last_x", int64),
-    ("second_last_y", int64),
+    ("last_xys", int64[:, :]),
     ("color", int32[:]),
     ("pheromone_amount", float64),
 ]
@@ -42,32 +39,47 @@ def _observe(ant, grid: np.ndarray, occupied_squares: np.ndarray):
     center_y, center_x = 1, 1  # Center of the 3x3 grid
 
     prev_dy, prev_dx = 0, 0
-    if ant.last_x != -1 and ant.last_y != -1:
-        prev_dy = ant.y - ant.last_y
-        prev_dx = ant.x - ant.last_x
+    # average all lastxys to get a direction vector
+    for last_xy in ant.last_xys:
+        if last_xy[0] != -1 and last_xy[1] != -1:
+            prev_dy += last_xy[0]
+            prev_dx += last_xy[1]
+    prev_dy /= len(ant.last_xys)
+    norm_prev = np.sqrt(prev_dy**2 + prev_dx**2)
 
     for idx, (dy, dx) in enumerate(ANT_MOVES):
-        grid_y, grid_x = center_y + dy, center_x + dx
+        grid_y, grid_x = (center_y + dy) % grid.shape[0], (center_x + dx) % grid.shape[
+            1
+        ]
+        if grid_y != (center_y + dy):
+            dy = (
+                (grid_y - center_y)
+                if (grid_y - center_y) != 0
+                else -np.sign(dy) * (grid.shape[0] - 1)
+            )
+        if grid_x != (center_x + dx):
+            dx = (
+                (grid_x - center_x)
+                if (grid_x - center_x) != 0
+                else -np.sign(dx) * (grid.shape[1] - 1)
+            )
 
-        if 0 <= grid_y < 3 and 0 <= grid_x < 3:
-            pheromone_value = local_grid[grid_y, grid_x]
+        pheromone_value = local_grid[grid_y, grid_x]
 
-            # Check if square is occupied
-            if local_occupied[grid_y, grid_x] == 1:  # Ant present
-                pheromone_value = -5.0
-            elif local_occupied[grid_y, grid_x] == 2:  # Food present
-                pheromone_value = 50.0
+        # Check if square is occupied
+        if local_occupied[grid_y, grid_x] == 1:  # Ant present
+            pheromone_value = -1.0
+        elif local_occupied[grid_y, grid_x] == 2:  # Food present
+            pheromone_value = 5.0
 
-            # Bias towards forward motion
-            if dy == prev_dy and dx == prev_dx:
-                pheromone_value *= 1.5
+        # Bias towards forward motion
+        norm_current = np.sqrt(dy**2 + dx**2)
+        if norm_prev != 0 and norm_current != 0:
+            cos_angle = (dy * prev_dy + dx * prev_dx) / (norm_prev * norm_current)
+            bias_factor = 2 * cos_angle  # Adjust bias here; 1 to 5 range
+            pheromone_value *= bias_factor
 
-            pheromone_values[idx] = pheromone_value
-        else:
-            if dy == prev_dy and dx == prev_dx:
-                pheromone_values[idx] = -5.0
-            else:
-                pheromone_values[idx] = -10.0
+        pheromone_values[idx] = pheromone_value
 
     probabilities = np.exp(pheromone_values)
     probabilities /= np.sum(probabilities)
@@ -82,10 +94,8 @@ class Ant:
 
         self.x = x
         self.y = y
-        self.last_x = -1  # Use -1 to indicate no previous position
-        self.last_y = -1
-        self.second_last_x = -1
-        self.second_last_y = -1
+        #     ("last_xys", List(Tuple([int64, int64]))),
+        self.last_xys = np.array([(-1, -1)] * 10, dtype=np.int64)
 
         self.pheromone_amount = pheromone_amount
 
@@ -113,3 +123,6 @@ class Ant:
 
     def observe(self, grid, occupied_squares):
         return _observe(self, grid, occupied_squares)
+
+    def clear_last(self):
+        self.last_xys = np.array([(-1, -1)] * 10, dtype=np.int64)
