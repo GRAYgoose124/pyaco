@@ -8,3 +8,4 @@ To integrate: xformers/triton brains for ants
 
 - [ ] food not being eaten
 - [ ] instance ant texture
+- [ ] fix non square grids

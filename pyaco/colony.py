@@ -122,8 +122,12 @@ class AntColonyEnv(gym.Env):
             self.foods,
             self.remains,
         )
+        log.debug(
+            f"Grid: {self.grid}\nreward: {reward}, done: {done}, ate_food: {ate_food}"
+        )
 
         if ate_food is not None:
+            log.debug(f"Food eaten at {ate_food}")
             # Find the index of the item to remove
             index_to_remove = None
             for i, food in enumerate(self.foods):

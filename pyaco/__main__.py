@@ -6,6 +6,9 @@ import logging
 from .colony import AntColonyEnv
 
 
+log = logging.getLogger(__name__)
+
+
 class AntColonyWindow(arcade.Window):
     def __init__(
         self,
@@ -17,6 +20,8 @@ class AntColonyWindow(arcade.Window):
         pheremone=0.000001,
         food_mul=0.01,
         n_food=10,
+        debug=False,
+        debug_frame_delay=0.125,
     ):
         self.square_size = square_size
 
@@ -34,6 +39,10 @@ class AntColonyWindow(arcade.Window):
         )
         self.grid_size = grid_size
         self.ITERATIONS_PER_FRAME = iters
+
+        self.DEBUG = debug
+        self.DEBUG_FRAME_DELAY = debug_frame_delay
+
         self.DECAY_RATE = decay
         self.ANT_PHEREMONE_AMOUNT = pheremone
         self.env = AntColonyEnv(
@@ -111,23 +120,57 @@ class AntColonyWindow(arcade.Window):
 
         self._update_transparency()
 
-        time.sleep(max(0, 1 / 60 - delta_time))
+        fps_target = 1 / 60 - delta_time
+        if self.DEBUG:
+            fps_target += self.DEBUG_FRAME_DELAY
+        time.sleep(max(0, fps_target))
+
+
+debug_settings = {
+    "window_size": (1000, 1000),
+    "square_size": 50,
+    "ant_count": 5,
+    "iters": 1,
+    "decay": 0.99,
+    "pheremone": 0.25,
+    "food_mul": 10.0,
+    "n_food": 2,
+    "debug": True,
+}
+
+default_settings = {
+    "window_size": (1000, 1000),
+    "square_size": 5,
+    "ant_count": 1500,
+    "iters": 10,
+    "decay": 0.999,
+    "pheremone": 0.005,
+    "food_mul": 0.5,
+    "n_food": 10,
+    "debug": False,
+}
 
 
 def main():
-    # TODO: Fix non-square grids
-    logging.basicConfig(level=logging.INFO)
+    DEBUG = True
+    disabled_loggers = ["arcade", "numba", "matplotlib", "pyglet"]
+
+    # Set up logging
+    logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO)
+    for name in disabled_loggers:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+    # Debug vs. release settings
+    if DEBUG:
+        settings = debug_settings
+    else:
+        settings = default_settings
 
     app = AntColonyWindow(
-        window_size=(800, 800),
-        ant_count=1500,
-        iters=10,
-        decay=0.99,
-        pheremone=0.05,
-        food_mul=10,
-        n_food=10,
-        square_size=3,
+        **settings,
     )
+
+    log.info("Starting app")
     app.run()
 
 
