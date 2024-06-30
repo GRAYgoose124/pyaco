@@ -22,7 +22,7 @@ def random_color():
 @numba.jit(nopython=True)
 def _step(
     grid, grid_size, ants, pheromone_decay_rate, foods, remains
-) -> (np.ndarray, float, bool, dict):
+) -> tuple[np.ndarray, float, bool, dict]:
     reward = 0
     ate_food = None
     occupied_squares = np.zeros(grid.shape, dtype=np.int64)
@@ -127,7 +127,7 @@ class AntColonyEnv(gym.Env):
         )
 
         if ate_food is not None:
-            log.debug(f"Food eaten at {ate_food}")
+            log.debug(f"Food eaten at {ate_food}, remaining {self.remains}")
             # Find the index of the item to remove
             index_to_remove = None
             for i, food in enumerate(self.foods):
