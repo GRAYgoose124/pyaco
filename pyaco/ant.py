@@ -90,26 +90,10 @@ class Ant:
         self.pheromone_amount = pheromone_amount
 
     def move(self, action):
-        if action == 0:  # Move up
-            self.y += 1
-        elif action == 1:  # Move right
-            self.x += 1
-        elif action == 2:  # Move down
-            self.y -= 1
-        elif action == 3:  # Move left
-            self.x -= 1
-        elif action == 4:  # Move up-right
-            self.y += 1
-            self.x += 1
-        elif action == 5:  # Move down-right
-            self.y -= 1
-            self.x += 1
-        elif action == 6:  # Move down-left
-            self.y -= 1
-            self.x -= 1
-        elif action == 7:  # Move up-left
-            self.y += 1
-            self.x -= 1
+        for i in range(8):
+            if action == i:
+                self.y += ANT_MOVES[i][0]
+                self.x += ANT_MOVES[i][1]
 
     def observe(self, grid, occupied_squares):
         return _observe(self, grid, occupied_squares)
